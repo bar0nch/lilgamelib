@@ -207,13 +207,33 @@ class g_paths:
             exc_message = f"multiple results were found: {found}. Try to provide a parent or a children directory to narrow down the results"
             raise game_exceptions.UnableToFindPath(path_name, exc_message)
 
+        
+
+
+#---------------------------------------USER UTILITY FUNCTIONS---------------------------------------
+
+def fill_alpha(surface, color):
+    """Fill all pixels of the surface with color, preserve transparency."""
+    w, h = surface.get_size()
+    r, g, b, _ = color
+    for x in range(w):
+        for y in range(h):
+            a = surface.get_at((x, y))[3]
+            surface.set_at((x, y), pygame.Color(r, g, b, a))
+
+            
 
 #------------------------------------------GENERAL CLASSES-------------------------------------------
 
 class Sprite:
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)
-        if type(args[1]) == pygame.Surface or "image" in kwargs:
+        if len(args) > 1:
+            if type(args[1]) == pygame.Surface or "image" in kwargs:
+                obj._manual_init(*args, **kwargs)
+            else:
+                obj._standard_init(*args, **kwargs)
+        elif "image" in kwargs:
             obj._manual_init(*args, **kwargs)
         else:
             obj._standard_init(*args, **kwargs)
@@ -225,6 +245,8 @@ class Sprite:
         self.img = image
         self.img_rect = self.img.get_rect()
         self.dimension = (self.img_rect.w, self.img_rect.h)
+        self.border_img = None
+        self._border_radius = None
 
         
     def _standard_init(self, name : str, path=None, parent_name : str =None, dimension : tuple =None, convert="alpha"):
@@ -253,6 +275,39 @@ class Sprite:
             self.img = pygame.transform.scale(self.img, dimension)
 
         self.img_rect = self.img.get_rect()
+        self.border_img = None
+        self._border_radius = None
+
+
+    def config_border(self, radius, color, up=True, down=True, left=True, right=True):
+        border_img = self.img.copy()
+        fill_alpha(border_img, color)
+        self.config_border_w_image(radius, border_img, up, down, left, right)
+
+
+    def config_border_w_image(self, radius, border_img, up=True, down=True, left=True, right=True):
+        self._border_radius = radius
+        border_surf = pygame.Surface((self.img_rect.w + radius * 2, self.img_rect.h + radius * 2), flags=pygame.SRCALPHA)
+        border_surf_rect = border_surf.get_rect()
+        border_img_rect = border_img.get_rect()
+        surf_center = (border_surf_rect.w // 2, border_surf_rect.h // 2)
+        if up:
+            up_rect = border_img_rect.copy()
+            up_rect.center = (surf_center[0], surf_center[1] - radius)
+            border_surf.blit(border_img, up_rect)
+        if down:
+            down_rect = border_img_rect.copy()
+            down_rect.center = (surf_center[0], surf_center[1] + radius)
+            border_surf.blit(border_img, down_rect)
+        if left:
+            left_rect = border_img_rect.copy()
+            left_rect.center = (surf_center[0] - radius, surf_center[1])
+            border_surf.blit(border_img, left_rect)
+        if right:
+            right_rect = border_img_rect.copy()
+            right_rect.center = (surf_center[0] + radius, surf_center[1])
+            border_surf.blit(border_img, right_rect)
+        self.border_img = border_surf
 
 
     def position(self, x, y, center=False):
@@ -262,7 +317,25 @@ class Sprite:
             self.img_rect.x, self.img_rect.y = x, y
 
 
+    def resize_to_new_w(self, new_w):
+        proportions = self.img_rect.h / self.img_rect.w
+        self.img = pygame.transform.scale(self.img, (new_w, round(new_w * proportions)))
+        rect_center = self.img_rect.center
+        self.img_rect = self.img.get_rect()
+        self.img_rect.center = rect_center
+
+
+    def resize_to_new_h(self, new_h):
+        proportions = self.img_rect.w / self.img_rect.h
+        self.img = pygame.transform.scale(self.img, (round(new_h * proportions), new_h))
+        rect_center = self.img_rect.center
+        self.img_rect = self.img.get_rect()
+        self.img_rect.center = rect_center
+
+
     def draw(self, surface):
+        if self.border_img:
+            surface.blit(self.border_img, (self.img_rect.x - self._border_radius, self.img_rect.y - self._border_radius))
         surface.blit(self.img, self.img_rect)
 
 
@@ -657,7 +730,6 @@ class GameObject(ScreenElement):
     def __init__(self):
         super().__init__((0, 0))
         self.sprite_group = None
-        self.shapes = []
 
     def __repr__(self):
         return f"<GameObject at {self.x} {self.y}>"
@@ -687,9 +759,7 @@ class GameObject(ScreenElement):
         
 
     def fixed_update(self):
-        if self.shapes:
-            for shape in self.shapes:
-                shape.shape_update()
+        pass
     
 
     def draw(self):
@@ -697,71 +767,7 @@ class GameObject(ScreenElement):
 
 
     def _auto_update(self):
-        if self.shapes:
-            for shape in self.shapes:
-                shape.shape_auto_update()
-
-
-
-class lglShape:
-    drawing_color = (70, 250, 40)
-    
-    def __init__(self, game_object, coords=None, follow_func=None):
-        self.game_object = game_object
-        
-        if coords:
-            self._x = coords[0]
-            self._y = coords[1]
-        else:
-            self._x = self.game_object.x
-            self._y = self.game_object.y
-            
-        if follow_func:
-            self.follow = follow_func
-        else:
-            def default_follow_func():
-                self.x = self.game_object.x
-                self.y = self.game_object.y
-
-
-    @property
-    def x(self):
-        return self._x
-
-    @x.setter
-    def x(self, new_x):
-        self._x = new_x
-
-    @property
-    def y(self):
-        return self._y
-
-    @y.setter
-    def y(self, new_y):
-        self._y = new_y
-
-
-    def shape_update(self):
         pass
-
-
-    def shape_auto_update(self):
-        pass
-
-
-    def draw(self):
-        pass
-
-
-
-class lglCircle(lglShape):
-    def __init__(self, game_object, radius, coords=None, follow_func=None):
-        super().__init__(game_object, coords, follow_func)
-        self.radius = radius
-
-
-    def draw(self):
-        pygame.draw.circle(lgl.WINDOW, lglShape.drawing_color, (self.x, self.y), self.radius)
 
 
 
